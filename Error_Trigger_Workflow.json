@@ -1,0 +1,49 @@
+{
+    "nodes": [
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                0,
+                0
+            ],
+            "id": "09ed85d9-d35a-4376-b4f0-e828aa5858ad",
+            "name": "Error Trigger"
+        },
+        {
+            "parameters": {
+                "sendTo": "YOUR_ALERT_EMAIL@example.com",
+                "subject": "[n8n] Code review FAILED – {{$json.workflow?.name ?? 'unknown'}}",
+                "emailType": "text",
+                "message": "🔥 n8n GitHub code review FAILED\n\nWorkflow : {{$json.workflow?.name ?? 'unknown'}}\nExecution: {{$json.execution?.id ?? 'unknown'}}\n\nError node   : {{$json.error?.node?.name ?? $json.execution?.lastNodeExecuted ?? 'N/A'}}\nNode type    : {{$json.error?.node?.type ?? 'N/A'}}\nError message: {{$json.error?.message ?? 'No message provided'}}\n\nLast node executed: {{$json.execution?.lastNodeExecuted ?? 'unknown'}}\n\nSummary:\nA failure occurred in the workflow during the execution of the node \"{{$json.error?.node?.name ?? $json.execution?.lastNodeExecuted ?? 'Unknown'}}\".\nThe workflow stopped immediately and triggered this error report.\nError message: \"{{$json.error?.message ?? 'No additional details'}}\".\n\nOpen n8n → Executions and search for this execution ID to see full details.",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.gmail",
+            "typeVersion": 2.1,
+            "position": [
+                208,
+                0
+            ],
+            "id": "8727b611-044f-46a8-815e-b8934f257fab",
+            "name": "Send Error Email"
+        }
+    ],
+    "connections": {
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Error Email",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true
+    }
+}

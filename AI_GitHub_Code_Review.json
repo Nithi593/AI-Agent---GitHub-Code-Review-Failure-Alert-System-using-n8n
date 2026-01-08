@@ -1,0 +1,392 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "owner": {
+                    "__rl": true,
+                    "value": "YOUR_GITHUB_USERNAME",
+                    "mode": "list",
+                    "cachedResultName": "YOUR_GITHUB_USERNAME",
+                    "cachedResultUrl": "https://github.com/YOUR_GITHUB_USERNAME"
+                },
+                "repository": {
+                    "__rl": true,
+                    "value": "YOUR_REPO_NAME",
+                    "mode": "list",
+                    "cachedResultName": "YOUR_REPO_NAME",
+                    "cachedResultUrl": "https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME"
+                },
+                "events": [
+                    "push"
+                ],
+                "options": {}
+            },
+            "type": "n8n-nodes-base.githubTrigger",
+            "typeVersion": 1,
+            "position": [
+                -2288,
+                -112
+            ],
+            "id": "af9f4abb-8fc4-47f6-bb10-de41f434bfe2",
+            "name": "Github Trigger"
+        },
+        {
+            "parameters": {
+                "url": "=https://api.github.com/repos/{{$node[\"Github Trigger\"].json.body.repository.full_name}}/commits/{{$node[\"Github Trigger\"].json.body.head_commit.id}}",
+                "options": {}
+            },
+            "name": "Compare Commits",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                -1824,
+                -256
+            ],
+            "id": "9762c05f-fa39-4a11-ae6c-f888ce1b5c6f"
+        },
+        {
+            "parameters": {
+                "fieldToSplitOut": "files",
+                "options": {}
+            },
+            "position": [
+                -1664,
+                -96
+            ],
+            "type": "n8n-nodes-base.itemLists",
+            "name": "Split Files",
+            "id": "b0c45fcd-98bb-4ce7-8949-bfafea3bb3ed",
+            "typeVersion": 3.1
+        },
+        {
+            "parameters": {
+                "jsCode": "const maxChars = 4000; // adjust if you want more/less context\n\nconst newItems = [];\n\nfor (const item of items) {\n  const data = item.json || {};\n  let decoded = '';\n\n  if (data.content && data.encoding === 'base64') {\n    try {\n      decoded = Buffer.from(data.content, 'base64').toString('utf8');\n    } catch (e) {\n      decoded = '';\n    }\n  }\n\n  if (decoded && decoded.length > maxChars) {\n    decoded = decoded.slice(0, maxChars) + '\\n\\n...[truncated]...';\n  }\n\n  newItems.push({\n    json: {\n      ...data,\n      fileSnippet: decoded,\n    },\n  });\n}\n\nreturn newItems;\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -1136,
+                -288
+            ],
+            "id": "0bb1eb73-9559-490c-a6b5-e4d89050450d",
+            "name": "Prepare File Content"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "9ca31394-3e6e-4e6b-9d8f-623f28678708",
+                            "leftValue": "={{$json.path}}",
+                            "rightValue": "",
+                            "operator": {
+                                "type": "string",
+                                "operation": "notEmpty",
+                                "singleValue": true
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -1184,
+                160
+            ],
+            "id": "9fa68149-99b4-4d18-98fe-b2036819187c",
+            "name": "Is Review Generated?"
+        },
+        {
+            "parameters": {
+                "sendTo": "YOUR_EMAIL@example.com",
+                "subject": "No Review Generated for the recent push",
+                "message": "=No Review Generated for the recent push\\n\"URL: https://github.com/\" + $item(0).$node[\"Github Trigger\"].json.body.repository.full_name + \"/commit/\" + $item(0).$node[\"Github Trigger\"].json.body.head_commit.id + \"\\n\\n\" + \"-------------------------------------------------------\\n\\n\" + $json.output",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.gmail",
+            "typeVersion": 2.1,
+            "position": [
+                -864,
+                240
+            ],
+            "id": "585e9496-abb2-40d4-a89b-bcb5126f64a8",
+            "name": "No Review"
+        },
+        {
+            "parameters": {
+                "jsCode": "const newItems = [];\n\nfor (const item of items) {\n  const raw = (item.json.content?.parts?.[0]?.text) || '';\n\n  const start = raw.indexOf('{');\n  const end = raw.lastIndexOf('}');\n  if (start === -1 || end === -1 || end <= start) {\n    continue;\n  }\n\n  const jsonStr = raw.slice(start, end + 1).trim();\n\n  let cleaned = jsonStr;\n  if (cleaned.startsWith('```')) {\n    cleaned = cleaned.replace(/^```[a-zA-Z]*\\s*/, '');\n    cleaned = cleaned.replace(/```$/, '').trim();\n  }\n\n  let parsed;\n  try {\n    parsed = JSON.parse(cleaned);\n  } catch (e) {\n    continue;\n  }\n\n  const file = parsed.file;\n  const issues = Array.isArray(parsed.issues) ? parsed.issues : [];\n\n  for (const issue of issues) {\n    if (issue && typeof issue.line === 'number' && issue.comment) {\n      newItems.push({\n        json: {\n          path: file,\n          line: issue.line,\n          body: issue.comment,\n        },\n      });\n    }\n  }\n}\n\nreturn newItems;\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -1424,
+                160
+            ],
+            "id": "fc164c73-01ec-47b6-aaec-bf9c3908dd3b",
+            "name": "Split Issues"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "=https://api.github.com/repos/{{$item(0).$node[\"Github Trigger\"].json.body.repository.full_name}}/commits/{{$item(0).$node[\"Github Trigger\"].json.body.head_commit.id}}/comments",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "githubApi",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "body",
+                            "value": "={{$json.body}}"
+                        },
+                        {
+                            "name": "path",
+                            "value": "={{$json.path}}"
+                        },
+                        {
+                            "name": "position",
+                            "value": "={{$json.line}}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                -880,
+                64
+            ],
+            "id": "3196ae2b-7de9-4dbf-bca9-5e413336e2dc",
+            "name": "Post Inline comment"
+        },
+        {
+            "parameters": {
+                "url": "={{$json.contents_url}}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                -1312,
+                -128
+            ],
+            "id": "bfb1a302-9b82-42a2-8c79-10e188f0073a",
+            "name": "Contents URL"
+        },
+        {
+            "parameters": {
+                "jsCode": "return items.filter(item => {\n  const name = item.json.filename || '';\n  return name.endsWith('.java') && !name.startsWith('target/');\n});\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -1488,
+                -256
+            ],
+            "id": "56df1352-fece-49aa-85e7-884d6f95e318",
+            "name": "Keep Java Source Files"
+        },
+        {
+            "parameters": {
+                "url": "=https://api.github.com/repos/{{$json.body.repository.full_name}}/git/trees/{{$json.body.repository.default_branch}}?recursive=1",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "githubApi",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                -2128,
+                -272
+            ],
+            "id": "7528626b-1553-4aae-aa47-81daad571f5e",
+            "name": "Get Project Tree"
+        },
+        {
+            "parameters": {
+                "jsCode": "const tree = (items[0].json.tree || []);\n\nconst javaPaths = tree\n  .filter(entry =>\n    entry.type === 'blob' &&\n    entry.path.endsWith('.java') &&\n    !entry.path.startsWith('target/')\n  )\n  .map(entry => entry.path)\n  .sort();\n\nconst projectStructure = javaPaths.join('\\n');\n\nreturn [\n  {\n    json: {\n      projectStructure,\n      javaPaths,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -1984,
+                -112
+            ],
+            "id": "d2f8812f-7c35-406d-bec0-e31a2188cf0e",
+            "name": "Build Project Structure"
+        },
+        {
+            "parameters": {
+                "modelId": {
+                    "__rl": true,
+                    "value": "models/gemini-2.5-flash",
+                    "mode": "list",
+                    "cachedResultName": "models/gemini-2.5-flash"
+                },
+                "messages": {
+                    "values": [
+                        {
+                            "content": "You are a helpful and experienced senior software engineer. Review the provided diff and file content for bugs, vulnerabilities, performance issues, and adherence to best practices. Respond exactly in the requested JSON format.",
+                            "role": "model"
+                        },
+                        {
+                            "content": "=You are an experienced senior software engineer performing a code review.\n\nYou will be given:\n1. The project structure (list of all Java source files).\n2. The full content (or a large snippet) of the file being changed.\n3. The Git diff for this file.\n\nUse ALL of these to reason about correctness across the project, not just within this file.\n\n---\n## Project structure (Java files)\n\nThe following are all Java source files in this repository (build artifacts like target/ are excluded):\n\n{{$item(0).$node[\"Build Project Structure\"].json.projectStructure}}\n\n---\n## File being reviewed\n\nFile path: `{{$json.path}}`\n\n### Full file content (truncated if very long)\n\n```java\n{{$json.fileSnippet}}\n\n---\n\nGit diff for this file\n\n{{$node[\"Split Files\"].json.patch}}\n\n---\n\nOutput format (IMPORTANT)\n\nYou MUST respond ONLY with valid JSON.\nDo NOT wrap it in code fences.\nDo NOT add any extra text before or after the JSON.\n\nRespond in exactly this structure:\n\n{\n  \"file\": \"{{$json.path}}\",\n  \"issues\": [\n    {\n      \"line\": 42,\n      \"comment\": \"Short, clear review comment with suggested fix.\"\n    }\n  ]\n}\n\nIf there are no issues, respond with:\n\n{\n  \"file\": \"{{$json.path}}\",\n  \"issues\": []\n}\n"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.googleGemini",
+            "typeVersion": 1,
+            "position": [
+                -944,
+                -128
+            ],
+            "id": "e16cbafc-c9c6-4699-adbb-8ccb510d6021",
+            "name": "AI Reviewer"
+        }
+    ],
+    "connections": {
+        "Github Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Get Project Tree",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Project Tree": {
+            "main": [
+                [
+                    {
+                        "node": "Build Project Structure",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Project Structure": {
+            "main": [
+                [
+                    {
+                        "node": "Compare Commits",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Compare Commits": {
+            "main": [
+                [
+                    {
+                        "node": "Split Files",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split Files": {
+            "main": [
+                [
+                    {
+                        "node": "Keep Java Source Files",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Keep Java Source Files": {
+            "main": [
+                [
+                    {
+                        "node": "Contents URL",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Contents URL": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare File Content",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare File Content": {
+            "main": [
+                [
+                    {
+                        "node": "AI Reviewer",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "AI Reviewer": {
+            "main": [
+                [
+                    {
+                        "node": "Split Issues",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split Issues": {
+            "main": [
+                [
+                    {
+                        "node": "Is Review Generated?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Is Review Generated?": {
+            "main": [
+                [
+                    {
+                        "node": "Post Inline comment",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "No Review",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true
+    }
+}
